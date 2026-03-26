@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Attendance Calculator (Advanced UI)</title>
+
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+    :root {
+        --primary: #4a69e2;
+        --primary-dark: #3955c4;
+        --bg: #eef1f7;
+        --card-bg: #ffffff;
+        --text-dark: #1a1a1a;
+        --green: #d4edda;
+        --yellow: #fff3cd;
+        --red: #ffdddd;
+    }
+
+    body {
+        font-family: "Poppins", sans-serif;
+        background: var(--bg);
+        margin: 0;
+        padding: 40px;
+        color: var(--text-dark);
+    }
+
+    h2 {
+        text-align: center;
+        margin-bottom: 25px;
+        font-weight: 600;
+        font-size: 28px;
+    }
+
+    /* Layout */
+    .card {
+        background: var(--card-bg);
+        padding: 25px;
+        border-radius: 16px;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+        margin-bottom: 30px;
+        animation: fadeIn 0.6s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+        from {opacity: 0; transform: translateY(10px);}
+        to {opacity: 1; transform: translateY(0);}
+    }
+
+    /* Table */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    th {
+        background: var(--primary);
+        color: white;
+        padding: 14px;
+        font-size: 15px;
+    }
+    td {
+        background: white;
+        padding: 12px;
+        text-align: center;
+        font-size: 14px;
+        border-bottom: 1px solid #eee;
+    }
+
+    /* Inputs */
+    input[type="number"] {
+        padding: 8px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        width: 80px;
+        font-size: 15px;
+        transition: 0.2s;
+    }
+    input:focus {
+        border-color: var(--primary);
+        outline: none;
+        box-shadow: 0 0 6px rgba(74,105,226,0.3);
+    }
+
+    /* Buttons */
+    button {
+        padding: 14px 28px;
+        margin-right: 15px;
+        border: none;
+        background: var(--primary);
+        color: white;
+        font-size: 16px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: 0.25s;
+    }
+    button:hover {
+        background: var(--primary-dark);
+        transform: translateY(-2px);
+    }
+
+    /* Result Box */
+    #resultBox {
+        background: #e8ecff;
+        border-left: 6px solid var(--primary);
+        padding: 20px;
+        border-radius: 12px;
+        font-size: 17px;
+        margin-top: 25px;
+        animation: fadeIn 0.5s ease-in-out;
+    }
+
+    /* Colors */
+    .red { background: var(--red) !important; }
+    .yellow { background: var(--yellow) !important; }
+    .green { background: var(--green) !important; }
+
+</style>
+</head>
+
+<body>
+
+<h2>📘 Attendance Calculator (Advanced LTPS Weighted)</h2>
+
+<div class="card">
+<table id="attendanceTable">
+    <tr>
+        <th>Subject</th>
+        <th>LTPS</th>
+        <th>Conducted</th>
+        <th>Attended</th>
+        <th>Percentage</th>
+        <th>Need to Attend</th>
+        <th>Can Skip</th>
+    </tr>
+</table>
+
+<br>
+
+<button onclick="calculateAll()">Calculate</button>
+<button onclick="exportExcel()">Download Excel</button>
+
+<div id="resultBox">Enter conducted + attended, then click Calculate.</div>
+</div>
+
+<h2>📊 Subject Summary</h2>
+
+<div class="card">
+<table id="summaryTable">
+    <tr>
+        <th>Subject</th>
+        <th>Final Percentage</th>
+    </tr>
+</table>
+</div>
+
+<script>
+// Subject Data
+const subjects = [
+    ["LACE", "L"],
+    ["LACE", "T"],
+    ["DS", "L"],
+    ["DS", "P"],
+    ["DS", "S"],
+    ["PYTHON", "L"],
+    ["PYTHON", "P"],
+    ["FIS", "L"],
+    ["FIS", "P"],
+    ["COA", "L"],
+    ["CSE", "P"],
+    ["DTW", "P"]
+];
+
+// Grouping
+const subjectGroups = {
+    "LACE": [0,1],
+    "DS": [2,3,4],
+    "PYTHON": [5,6],
+    "FIS": [7,8],
+    "COA": [9],
+    "CSE": [10],
+    "DTW": [11]
+};
+
+// LTPS Weights
+const weights = { L:1, T:0.25, P:0.5, S:0.25 };
+
+// Build Table
+const table = document.getElementById("attendanceTable");
+subjects.forEach((sub,i)=>{
+    let row=document.createElement("tr");
+    row.innerHTML=`
+        <td>${sub[0]}</td>
+        <td>${sub[1]}</td>
+        <td><input type="number" id="c${i}"></td>
+        <td><input type="number" id="a${i}"></td>
+        <td id="p${i}">-</td>
+        <td id="need${i}">-</td>
+        <td id="skip${i}">-</td>
+    `;
+    table.appendChild(row);
+});
+
+// MAIN CALCULATOR
+function calculateAll() {
+
+    document.getElementById("summaryTable").innerHTML = `
+        <tr><th>Subject</th><th>Final Percentage</th></tr>
+    `;
+
+    let totals = {};
+    for (let sub in subjectGroups) {
+        totals[sub] = { totalC:0, totalA:0, rows:subjectGroups[sub] };
+    }
+
+    subjects.forEach((sub,i)=>{
+        let c = Number(document.getElementById("c"+i).value);
+        let a = Number(document.getElementById("a"+i).value);
+        let w = weights[sub[1]];
+
+        if (a > c) a = c;
+
+        totals[sub[0]].totalC += c * w;
+        totals[sub[0]].totalA += a * w;
+    });
+
+    for (let subject in totals) {
+        let t = totals[subject];
+        let pct = t.totalC > 0 ? (t.totalA / t.totalC) * 100 : 0;
+        let rounded = Math.ceil(pct);
+
+        document.getElementById("summaryTable").innerHTML += `
+            <tr>
+                <td>${subject}</td>
+                <td>${rounded}%</td>
+            </tr>
+        `;
+
+        let requiredW = t.totalC * 0.85;
+        let need = Math.max(0, Math.ceil(requiredW - t.totalA));
+        let skip = Math.max(0, Math.floor(t.totalA - requiredW));
+
+        t.rows.forEach(i=>{
+            let c = Number(document.getElementById("c"+i).value);
+            let a = Number(document.getElementById("a"+i).value);
+            let w = weights[subjects[i][1]];
+
+            let compPct = c > 0 ? ((a*w)/(c*w))*100 : 0;
+
+            document.getElementById("p"+i).innerText = Math.ceil(compPct);
+            document.getElementById("need"+i).innerText = need;
+            document.getElementById("skip"+i).innerText = skip;
+
+            let row = document.getElementById("p"+i).parentElement;
+            row.classList.remove("red","yellow","green");
+
+            if (rounded < 75) row.classList.add("red");
+            else if (rounded < 85) row.classList.add("yellow");
+            else row.classList.add("green");
+        });
+    }
+
+    document.getElementById("resultBox").innerText = "✅ Calculated successfully using weighted & rounded values!";
+}
+
+// EXCEL EXPORT
+function exportExcel() {
+    let wb = XLSX.utils.book_new();
+
+    let mainSheet = XLSX.utils.table_to_sheet(document.getElementById("attendanceTable"));
+    XLSX.utils.book_append_sheet(wb, mainSheet, "Components");
+
+    let summarySheet = XLSX.utils.table_to_sheet(document.getElementById("summaryTable"));
+    XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+
+    XLSX.writeFile(wb, "Attendance.xlsx");
+}
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<div class="card" style="text-align:center; margin-top:40px;">
+    <h2>💬 Your Feedback Matters!</h2>
+    <p style="font-size:16px; margin-bottom:18px;">
+        Help us improve this Attendance Calculator by sharing your feedback.
+    </p>
+
+    <a href="https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=PsiMgEal50egP3Oh67ok87OJEt2GN6NPp8-zo5mkXx9URFlROFlaMFJVWENTRlJYUVlUM0hVRU9MVi4u"
+       target="_blank"
+       style="
+            display:inline-block;
+            background:#4a69e2;
+            padding:14px 28px;
+            border-radius:10px;
+            color:white;
+            text-decoration:none;
+            font-size:17px;
+            font-weight:500;
+            transition:0.25s;
+       "
+       onmouseover="this.style.background='#3b55cc'"
+       onmouseout="this.style.background='#4a69e2'">
+        ✅ Give Feedback
+    </a>
+</div>
+</body>
+</html>
